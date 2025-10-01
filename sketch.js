@@ -1,4 +1,4 @@
-const PARTICLE_COUNT = 140;
+const PARTICLE_COUNT = 550;
 const particles = [];
 const baseFlowStrength = 0.05;
 const flowScale = 0.0018;
@@ -61,13 +61,16 @@ function draw() {
   background(235, 90, 6, 10);
 
   const targetForce = createVector(0, 0);
+  let controlling = false;
   const now = Date.now();
   const orientationActive = permissionGranted && now - lastOrientationTime < 900;
 
   if (orientationActive) {
+    controlling = true;
     setIndicator(true, 'Motion signal locked.');
     targetForce.set(orientationVector.x, -orientationVector.y).mult(0.55);
   } else if ((touches && touches.length > 0) || mouseIsPressed) {
+    controlling = true;
     if (Number.isFinite(mouseX) && Number.isFinite(mouseY)) {
       const pointer = createVector(mouseX - width / 2, mouseY - height / 2);
       const scale = Math.max(min(width, height) / 2, 1);
@@ -76,7 +79,7 @@ function draw() {
     } else {
       targetForce.set(0, 0);
     }
-    setIndicator(false, 'Guiding swarm with touch input.');
+    setIndicator(true, 'Guiding swarm with touch input.');
   } else {
     const idleMessage = permissionGranted
       ? 'Waiting for motion data…'
@@ -84,21 +87,14 @@ function draw() {
       ? 'Awaiting motion access…'
       : 'Tilt or drag to guide the swarm.';
     setIndicator(false, idleMessage);
-
-    if (!needsPermission) {
-      targetForce.set(
-        sin(frameCount * 0.01) * 0.18,
-        cos(frameCount * 0.013) * 0.18
-      );
-    }
   }
 
   smoothedForce.lerp(targetForce, motionSmoothing);
 
   particles.forEach((particle) => {
     particle.applyForce(smoothedForce);
-    particle.applyFlow(frameCount);
-    particle.update();
+    particle.applyFlow(frameCount, controlling);
+    particle.update(controlling);
     particle.draw();
   });
 }
@@ -176,11 +172,12 @@ function setIndicator(active, message) {
 class Particle {
   constructor() {
     this.pos = createVector(random(width), random(height));
-    this.vel = p5.Vector.random2D().mult(random(0.2, 1.2));
+    this.vel = createVector(0, 0);
     this.acc = createVector(0, 0);
-    this.size = random(6, 16);
-    this.hue = random(180, 230);
-    this.alpha = random(40, 70);
+    this.size = random(2, 4.5);
+    this.hue = random(185, 220);
+    this.sat = random(10, 35);
+    this.alpha = random(65, 90);
     this.twinkleOffset = random(TAU);
   }
 
@@ -188,15 +185,21 @@ class Particle {
     this.acc.add(force);
   }
 
-  applyFlow(frame) {
+  applyFlow(frame, active) {
+    if (!active) {
+      return;
+    }
     const n = noise(this.pos.x * flowScale, this.pos.y * flowScale, frame * 0.004);
     const angle = TAU * n;
     const flow = p5.Vector.fromAngle(angle).mult(baseFlowStrength);
     this.acc.add(flow);
   }
 
-  update() {
+  update(active) {
     this.vel.add(this.acc);
+    if (!active) {
+      this.vel.mult(0.9);
+    }
     this.vel.limit(2.4);
     this.pos.add(this.vel);
     this.acc.mult(0);
@@ -212,8 +215,8 @@ class Particle {
 
   draw() {
     const pulse = (sin(frameCount * 0.05 + this.twinkleOffset) + 1) * 0.5;
-    const brightness = map(pulse, 0, 1, 60, 95);
-    fill(this.hue, 80, brightness, this.alpha + pulse * 20);
+    const brightness = map(pulse, 0, 1, 70, 100);
+    fill(this.hue, this.sat, brightness, this.alpha + pulse * 20);
     ellipse(this.pos.x, this.pos.y, this.size, this.size);
   }
 }
